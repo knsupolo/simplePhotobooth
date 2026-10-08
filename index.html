@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PHOTOEAST - 스마트 포토부스</title>
+  <title>PHOTOEAST SLIM - 스마트 포토부스</title>
   <!-- Tailwind CSS & FontAwesome & QRCode CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -12,117 +12,201 @@
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     * { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
     
-    /* 인쇄 시 오직 사진만 4x6 규격으로 출력 */
+    /* 4x6인치 (100x150mm) 인쇄 전용 스타일 */
     @media print {
-      body * { visibility: hidden; }
-      #printableArea, #printableArea * { visibility: visible; }
-      #printableArea { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+      body * { visibility: hidden !important; }
+      #printArea, #printArea * { visibility: visible !important; }
+      #printArea { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
       @page { size: 4in 6in; margin: 0; }
     }
   </style>
 </head>
-<body class="bg-black text-white min-h-screen overflow-hidden select-none">
+<body class="bg-zinc-950 text-white min-h-screen overflow-x-hidden select-none">
 
   <!-- ========================================================
-       화면 1: 키오스크 촬영 모드 (대기 & 뷰파인더)
+       화면 1: 대기 및 6컷 자동 촬영 뷰
   ======================================================== -->
-  <section id="view-booth" class="relative w-screen h-screen flex flex-col items-center justify-center">
+  <section id="view-camera" class="relative w-screen h-screen flex flex-col items-center justify-center bg-black overflow-hidden">
     <!-- 실시간 카메라 스트림 -->
     <video id="webcam" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover transform -scale-x-100"></video>
-    
-    <!-- 플래시 효과 레이어 -->
-    <div id="flashOverlay" class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-150 z-30"></div>
+    <div id="flashOverlay" class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-150 z-40"></div>
 
-    <!-- 상단 상태 및 안내 -->
-    <div class="absolute top-6 left-0 right-0 flex justify-between items-center px-8 z-20">
-      <div class="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
-        <span class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
-        <span class="text-xs font-bold tracking-widest uppercase">PHOTOEAST BOOTH</span>
+    <!-- 상단 헤더 & 카운터 -->
+    <div class="absolute top-5 left-0 right-0 px-6 flex justify-between items-center z-20">
+      <div class="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+        <span class="text-xs font-black tracking-widest uppercase">PHOTOEAST PRO</span>
       </div>
-      <div id="shotCounterBadge" class="hidden bg-blue-600 text-white font-black px-4 py-1.5 rounded-full text-sm shadow-lg">
-        촬영 중: <span id="currentShotNum">1</span> / 4
+      <div id="sessionCounterBadge" class="hidden bg-blue-600 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-lg">
+        촬영 중: <span id="currentShotNum">1</span> / 6
       </div>
-      <!-- 프레임 PNG 업로드 (행사 기획자용) -->
-      <label class="bg-white/10 hover:bg-white/20 text-white/80 text-xs px-3 py-1.5 rounded-full border border-white/20 cursor-pointer transition">
-        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 커스텀 프레임
-        <input type="file" id="frameUploader" accept="image/png" class="hidden">
-      </label>
     </div>
 
-    <!-- 대형 터치 유도 버튼 (촬영 전) -->
-    <div id="startTouchZone" onclick="startPhotoSession()" class="absolute inset-0 flex flex-col items-center justify-center cursor-pointer z-10 bg-black/20 hover:bg-black/10 transition">
-      <div class="bg-white/90 text-black px-8 py-5 rounded-3xl font-black text-xl sm:text-2xl shadow-2xl flex items-center gap-3 animate-bounce">
-        <i class="fa-solid fa-camera text-blue-600"></i> 화면을 터치하여 촬영 시작
+    <!-- 대기 모드 컨트롤 독 (4초 / 6초 / 8초 간격 선택 및 시작 버튼) -->
+    <div id="standbyDock" class="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/35 backdrop-blur-[2px] transition-all">
+      <div class="bg-zinc-900/90 border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col items-center space-y-5 max-w-sm w-11/12">
+        <div class="text-center">
+          <h2 class="text-xl font-black tracking-tight text-white">포토부스 촬영 준비</h2>
+          <p class="text-xs text-zinc-400 mt-1">총 6컷을 촬영한 후 베스트 컷을 선택합니다.</p>
+        </div>
+
+        <!-- 4초 / 6초 / 8초 인터벌 토글 -->
+        <div class="flex items-center gap-2 bg-black/60 p-1.5 rounded-2xl border border-white/10 w-full justify-between">
+          <span class="text-[11px] font-bold text-zinc-400 pl-3">포즈 시간</span>
+          <div class="flex gap-1">
+            <button onclick="setIntervalTime(4, this)" class="interval-chip px-3 py-1.5 rounded-xl text-xs font-bold text-zinc-400 hover:text-white transition">4초</button>
+            <button onclick="setIntervalTime(6, this)" class="interval-chip active bg-blue-600 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition">6초</button>
+            <button onclick="setIntervalTime(8, this)" class="interval-chip px-3 py-1.5 rounded-xl text-xs font-bold text-zinc-400 hover:text-white transition">8초</button>
+          </div>
+        </div>
+
+        <button onclick="startSession()" class="w-full bg-white hover:bg-zinc-200 text-black font-black py-4 rounded-2xl text-base shadow-xl flex items-center justify-center gap-2 transition active:scale-95">
+          <i class="fa-solid fa-camera text-blue-600"></i> 촬영 시작하기
+        </button>
       </div>
-      <p class="text-white/80 text-sm mt-4 font-medium drop-shadow-md">총 4컷이 5초 간격으로 자동 촬영됩니다</p>
     </div>
 
-    <!-- 대형 3-2-1 카운트다운 숫자 -->
-    <div id="countdownBox" class="hidden absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-      <span id="countdownText" class="text-9xl font-black text-white drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] animate-ping">3</span>
+    <!-- 카운트다운 디스플레이 -->
+    <div id="countdownBox" class="hidden absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
+      <span id="countdownNumber" class="text-9xl font-black text-white drop-shadow-[0_10px_30px_rgba(0,0,0,0.9)] animate-ping">3</span>
+    </div>
+
+    <!-- 하단 실시간 6컷 썸네일 트레이 -->
+    <div class="absolute bottom-6 left-0 right-0 px-4 z-20 flex justify-center">
+      <div class="bg-black/75 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 flex items-center gap-2 max-w-xl w-full justify-between shadow-2xl">
+        <div id="tray-1" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">1</div>
+        <div id="tray-2" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">2</div>
+        <div id="tray-3" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">3</div>
+        <div id="tray-4" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">4</div>
+        <div id="tray-5" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">5</div>
+        <div id="tray-6" class="tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold">6</div>
+      </div>
     </div>
   </section>
 
   <!-- ========================================================
-       화면 2: 결과 수령 모드 (인쇄, 릴스 비디오, QR)
+       화면 2: 사진 선택(Pick) 및 프레임 커스텀 스튜디오
   ======================================================== -->
-  <section id="view-result" class="hidden relative w-screen h-screen flex flex-col lg:flex-row items-center justify-center p-6 gap-8 bg-zinc-950">
-    <!-- 좌측: 완성된 4x6 쌍둥이 컷 캔버스 미리보기 -->
-    <div id="printableArea" class="flex-1 max-h-[85vh] flex justify-center items-center">
-      <canvas id="outputCanvas" class="max-h-[80vh] max-w-[90vw] object-contain rounded-xl shadow-2xl border border-zinc-800 bg-white"></canvas>
+  <section id="view-custom" class="hidden min-h-screen w-screen p-4 lg:p-8 flex flex-col lg:flex-row gap-6 items-center justify-center bg-zinc-950">
+    <!-- 좌측: 실시간 캔버스 미리보기 -->
+    <div class="flex-1 flex justify-center items-center max-h-[82vh] w-full">
+      <canvas id="previewCanvas" class="max-h-[80vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-zinc-900"></canvas>
     </div>
 
-    <!-- 우측: 수령 컨트롤 및 QR 수령 패널 -->
-    <div class="w-full lg:w-96 flex flex-col justify-between bg-zinc-900/90 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-6">
-      <!-- 상단 리셋 타이머 -->
-      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
-        <span class="text-xs font-bold text-zinc-400">자동 복귀 타이머</span>
-        <span id="resetTimerBadge" class="text-xs bg-red-500/20 text-red-400 font-bold px-2.5 py-1 rounded-full">40초</span>
+    <!-- 우측: 커스텀 제어 사이드바 -->
+    <div class="w-full lg:w-[420px] bg-zinc-900/90 border border-zinc-800 p-5 rounded-3xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div>
+        <h3 class="text-sm font-black text-white flex items-center gap-1.5">
+          <i class="fa-solid fa-check-double text-blue-500"></i> 베스트 사진 선택 (<span id="selectedCountText">0</span>/<span id="requiredCountText">4</span>)
+        </h3>
+        <p class="text-[11px] text-zinc-400 mt-0.5">터치한 순서대로 프레임에 배치됩니다.</p>
+        <!-- 6컷 선택 그리드 -->
+        <div id="pickGrid" class="grid grid-cols-3 gap-2 mt-2"></div>
       </div>
 
-      <!-- 모바일 다운로드용 QR 코드 영역 -->
-      <div class="flex flex-col items-center justify-center space-y-3">
-        <div id="qrcodeBox" class="bg-white p-3 rounded-2xl shadow-inner"></div>
-        <p class="text-[11px] text-zinc-400 text-center">스마트폰 기본 카메라로 비추면<br><b class="text-white">사진과 3초 무빙 비디오</b>를 저장할 수 있습니다.</p>
+      <!-- 프레임 레이아웃 선택 -->
+      <div class="space-y-1.5 pt-2 border-t border-zinc-800">
+        <label class="text-xs font-bold text-zinc-400">프레임 규격</label>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button onclick="setLayout('twin', this)" class="layout-btn active bg-blue-600 text-white py-2 rounded-xl text-xs font-bold transition">세로 4컷 쌍둥이</button>
+          <button onclick="setLayout('2x2', this)" class="layout-btn bg-zinc-800 text-zinc-300 py-2 rounded-xl text-xs font-bold transition">2×2 그리드</button>
+          <button onclick="setLayout('3x3', this)" class="layout-btn bg-zinc-800 text-zinc-300 py-2 rounded-xl text-xs font-bold transition">3×3 그리드</button>
+        </div>
       </div>
 
-      <!-- 액션 버튼 군 -->
-      <div class="space-y-2.5">
-        <button onclick="window.print()" class="w-full bg-white hover:bg-zinc-200 text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition shadow-lg">
-          <i class="fa-solid fa-print"></i> 즉시 인쇄 (4×6인치)
-        </button>
-        <button onclick="downloadMovingVideo()" id="btnDownloadVideo" class="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition shadow-lg">
-          <i class="fa-solid fa-film"></i> 움직이는 릴스 비디오 받기
-        </button>
-        <button onclick="downloadPhotoDirect()" class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium py-2.5 rounded-2xl text-xs transition">
-          <i class="fa-solid fa-download mr-1"></i> 고화질 사진 파일 다운로드
-        </button>
+      <!-- 프레임 배경 색상 -->
+      <div class="space-y-1.5 pt-2 border-t border-zinc-800">
+        <label class="text-xs font-bold text-zinc-400">배경 색상</label>
+        <div class="flex items-center gap-2">
+          <button onclick="setBgColor('#18181b', this)" class="color-btn w-8 h-8 rounded-full bg-zinc-900 border-2 border-blue-500 shadow-sm"></button>
+          <button onclick="setBgColor('#ffffff', this)" class="color-btn w-8 h-8 rounded-full bg-white border border-zinc-700 shadow-sm"></button>
+          <button onclick="setBgColor('#f5f5f0', this)" class="color-btn w-8 h-8 rounded-full bg-[#f5f5f0] border border-zinc-700 shadow-sm"></button>
+          <button onclick="setBgColor('#0f172a', this)" class="color-btn w-8 h-8 rounded-full bg-slate-900 border border-zinc-700 shadow-sm"></button>
+          <button onclick="setBgColor('#4c0519', this)" class="color-btn w-8 h-8 rounded-full bg-rose-950 border border-zinc-700 shadow-sm"></button>
+        </div>
       </div>
 
-      <button onclick="resetToHome()" class="w-full text-center text-xs text-zinc-500 hover:text-white transition py-1">
-        처음 화면으로 돌아가기
+      <!-- 3단 텍스트 각인 -->
+      <div class="space-y-2 pt-2 border-t border-zinc-800">
+        <label class="text-xs font-bold text-zinc-400">프레임 텍스트 설정</label>
+        <input type="text" id="inputTopText" placeholder="상단 문구 (선택 입력)" oninput="renderFinalCanvas()" class="w-full bg-black/60 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+        <input type="text" id="inputMiddleText" placeholder="중간 문구 (선택 입력)" oninput="renderFinalCanvas()" class="w-full bg-black/60 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+        <input type="text" id="inputBottomText" value="PHOTO STUDIO" placeholder="하단 기본 문구" oninput="renderFinalCanvas()" class="w-full bg-black/60 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-blue-500">
+      </div>
+
+      <button onclick="goToResultView()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3.5 rounded-2xl text-sm shadow-xl transition active:scale-95">
+        완성 및 결과 확인하기 <i class="fa-solid fa-arrow-right ml-1"></i>
       </button>
     </div>
   </section>
 
-  <!-- 숨김 비디오 렌더링용 임시 캔버스 -->
+  <!-- ========================================================
+       화면 3: 수령 허브 (인쇄 / 3종 미디어 다운로드 / QR)
+  ======================================================== -->
+  <section id="view-result" class="hidden min-h-screen w-screen p-4 lg:p-8 flex flex-col lg:flex-row gap-6 items-center justify-center bg-zinc-950">
+    <div id="printArea" class="flex-1 flex justify-center items-center max-h-[82vh] w-full">
+      <canvas id="finalCanvas" class="max-h-[80vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-zinc-800 bg-white"></canvas>
+    </div>
+
+    <div class="w-full lg:w-[400px] bg-zinc-900 border border-zinc-800 p-6 rounded-3xl space-y-5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <span class="text-xs font-black text-zinc-400">자동 복귀 타이머</span>
+        <span id="autoResetTimer" class="text-xs bg-rose-500/20 text-rose-400 font-bold px-2.5 py-0.5 rounded-full">60초</span>
+      </div>
+
+      <!-- 모바일 원스톱 수령 QR 코드 -->
+      <div class="flex flex-col items-center justify-center bg-zinc-950 p-4 rounded-2xl border border-zinc-800/80">
+        <div id="resultQrCode" class="bg-white p-2.5 rounded-xl"></div>
+        <p class="text-[11px] text-zinc-400 text-center mt-2.5">스마트폰 기본 카메라로 비추면<br><b class="text-white">사진과 2종 영상</b>을 바로 수령할 수 있습니다.</p>
+      </div>
+
+      <!-- 3종 미디어 개별 다운로드 및 인쇄 -->
+      <div class="space-y-2">
+        <button onclick="window.print()" class="w-full bg-white hover:bg-zinc-200 text-black font-black py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 transition shadow-lg">
+          <i class="fa-solid fa-print"></i> 🖨️ 4×6 즉시 인쇄하기
+        </button>
+        <button onclick="downloadImage()" class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-image text-blue-400"></i> 고화질 사진 저장 (.jpg)
+        </button>
+        <button onclick="downloadMotionVideo()" id="btnMotion" class="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-film"></i> 3초 모션 루프 비디오 (.webm)
+        </button>
+        <button onclick="downloadTimelapseVideo()" id="btnTimelapse" class="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-forward text-amber-300"></i> 2배속 타임랩스 비하인드 (.webm)
+        </button>
+      </div>
+
+      <button onclick="resetBooth()" class="w-full text-center text-xs text-zinc-500 hover:text-white transition py-1">
+        새로운 촬영 시작하기
+      </button>
+    </div>
+  </section>
+
+  <!-- 백그라운드 영상 렌더링용 임시 캔버스 -->
   <canvas id="motionCanvas" width="600" height="900" class="hidden"></canvas>
+  <canvas id="timelapseCanvas" width="1280" height="720" class="hidden"></canvas>
+  <video id="timelapseRawPlayer" class="hidden" playsinline muted></video>
 
   <script>
     // ========================================================
-    // 1. 상태 변수 및 오디오 신디사이저 엔진
+    // 전역 상태 변수
     // ========================================================
     let stream = null;
+    let selectedInterval = 6;
     let capturedFrames = [];
-    let customFrameImage = null;
-    let movingVideoBlobUrl = null;
-    let resetTimerInterval = null;
-    const SHOT_COUNT = 4;
-    const SHOT_DELAY = 4; // 카운트다운 초
+    let selectedIndices = [];
+    let currentLayout = 'twin'; // 'twin', '2x2', '3x3'
+    let currentBgColor = '#18181b';
 
-    // Web Audio 비프음 및 셔터 사운드 생성기 (외부 오디오 파일 불필요)
+    let rawMediaRecorder = null;
+    let rawChunks = [];
+    let motionBlobUrl = null;
+    let timelapseBlobUrl = null;
+    let resetCountdownInterval = null;
+
+    // Web Audio 신디사이저 (비프음 및 셔터음)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playBeep(freq = 800, dur = 0.08) {
+    function playBeep(freq = 600, dur = 0.08) {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -132,13 +216,13 @@
       gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
       osc.start(); osc.stop(audioCtx.currentTime + dur);
     }
-    function playShutterSound() {
-      playBeep(300, 0.05);
-      setTimeout(() => playBeep(1200, 0.12), 60);
+    function playShutter() {
+      playBeep(250, 0.05);
+      setTimeout(() => playBeep(1200, 0.12), 50);
     }
 
     // ========================================================
-    // 2. 카메라 초기화
+    // 1. 카메라 초기화
     // ========================================================
     async function initCamera() {
       try {
@@ -148,59 +232,79 @@
         });
         document.getElementById('webcam').srcObject = stream;
       } catch (err) {
-        alert("카메라 권한을 허용해 주세요: " + err.message);
+        alert("카메라 접근을 허용해 주세요: " + err.message);
       }
     }
     window.addEventListener('load', initCamera);
 
-    // ========================================================
-    // 3. 커스텀 프레임 PNG 업로드 리스너
-    // ========================================================
-    document.getElementById('frameUploader').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const img = new Image();
-        img.onload = () => { customFrameImage = img; alert("커스텀 프레임이 적용되었습니다!"); };
-        img.src = evt.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
+    function setIntervalTime(sec, btn) {
+      selectedInterval = sec;
+      document.querySelectorAll('.interval-chip').forEach(b => {
+        b.className = "interval-chip px-3 py-1.5 rounded-xl text-xs font-bold text-zinc-400 hover:text-white transition";
+      });
+      btn.className = "interval-chip active bg-blue-600 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition";
+    }
 
     // ========================================================
-    // 4. 자동 4컷 연속 촬영 파이프라인
+    // 2. 6컷 연속 촬영 및 타임랩스 원본 동시 레코딩
     // ========================================================
-    async function startPhotoSession() {
+    async function startSession() {
       capturedFrames = [];
-      document.getElementById('startTouchZone').classList.add('hidden');
-      document.getElementById('shotCounterBadge').classList.remove('hidden');
+      rawChunks = [];
+      document.getElementById('standbyDock').classList.add('hidden');
+      document.getElementById('sessionCounterBadge').classList.remove('hidden');
 
-      for (let i = 1; i <= SHOT_COUNT; i++) {
-        document.getElementById('currentShotNum').innerText = i;
-        await runCountdown(SHOT_DELAY);
-        triggerShutterEffect();
-        captureCurrentFrame();
-        await sleep(1000);
+      // 6개 썸네일 트레이 초기화
+      for (let i = 1; i <= 6; i++) {
+        const slot = document.getElementById(`tray-${i}`);
+        slot.innerHTML = i;
+        slot.className = "tray-slot flex-1 aspect-[3/2] bg-zinc-800/80 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-[10px] text-zinc-500 overflow-hidden font-bold";
       }
 
-      document.getElementById('shotCounterBadge').classList.add('hidden');
-      finishSessionAndRender();
+      // 전체 세션 백그라운드 레코딩 시작 (타임랩스 원본)
+      try {
+        rawMediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        rawMediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) rawChunks.push(e.data); };
+        rawMediaRecorder.start(100);
+      } catch (e) {
+        console.warn("타임랩스 원본 녹화 시작 실패: ", e);
+      }
+
+      // 6컷 순차 촬영 루프
+      for (let shot = 1; shot <= 6; shot++) {
+        document.getElementById('currentShotNum').innerText = shot;
+        await runCountdown(selectedInterval);
+        triggerFlash();
+        captureFrame(shot);
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      // 타임랩스 원본 레코딩 종료
+      if (rawMediaRecorder && rawMediaRecorder.state !== 'inactive') {
+        rawMediaRecorder.stop();
+        rawMediaRecorder.onstop = () => {
+          const rawBlob = new Blob(rawChunks, { type: 'video/webm' });
+          generate2xTimelapse(rawBlob);
+        };
+      }
+
+      document.getElementById('sessionCounterBadge').classList.add('hidden');
+      setupCustomView();
     }
 
     function runCountdown(seconds) {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         let count = seconds;
         const box = document.getElementById('countdownBox');
-        const text = document.getElementById('countdownText');
+        const num = document.getElementById('countdownNumber');
         box.classList.remove('hidden');
-        text.innerText = count;
+        num.innerText = count;
         playBeep(600, 0.1);
 
         const timer = setInterval(() => {
           count--;
           if (count > 0) {
-            text.innerText = count;
+            num.innerText = count;
             playBeep(600, 0.1);
           } else {
             clearInterval(timer);
@@ -211,174 +315,398 @@
       });
     }
 
-    function triggerShutterEffect() {
-      playShutterSound();
+    function triggerFlash() {
+      playShutter();
       const flash = document.getElementById('flashOverlay');
       flash.style.opacity = '0.9';
       setTimeout(() => { flash.style.opacity = '0'; }, 150);
     }
 
-    function captureCurrentFrame() {
+    function captureFrame(shotIndex) {
       const video = document.getElementById('webcam');
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = 1200;
-      tempCanvas.height = 800; // 3:2 비율 컷
+      tempCanvas.height = 800; // 3:2 와이드
       const ctx = tempCanvas.getContext('2d');
-      // 좌우 반전 처리
+      // 거울 반전 보정
       ctx.translate(tempCanvas.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
       capturedFrames.push(tempCanvas);
+
+      // 하단 트레이 슬롯 즉시 갱신
+      const slot = document.getElementById(`tray-${shotIndex}`);
+      slot.innerHTML = `<img src="${tempCanvas.toDataURL('image/jpeg', 0.7)}" class="w-full h-full object-cover animate-scale">`;
+      slot.className = "tray-slot flex-1 aspect-[3/2] bg-zinc-900 rounded-lg border-2 border-blue-500 overflow-hidden";
     }
 
     // ========================================================
-    // 5. 4x6 2줄 쌍둥이 컷 캔버스 합성 엔진
+    // 3. 사진 선택(Pick) 및 커스텀 스튜디오
     // ========================================================
-    function finishSessionAndRender() {
-      const canvas = document.getElementById('outputCanvas');
+    function setupCustomView() {
+      document.getElementById('view-camera').classList.add('hidden');
+      document.getElementById('view-custom').classList.remove('hidden');
+
+      // 기본 4장 자동 선택 (1, 2, 3, 4번)
+      selectedIndices = [0, 1, 2, 3];
+      renderPickGrid();
+      renderFinalCanvas();
+    }
+
+    function getRequiredCount() {
+      return currentLayout === '3x3' ? 9 : 4;
+    }
+
+    function renderPickGrid() {
+      const grid = document.getElementById('pickGrid');
+      grid.innerHTML = '';
+      const req = getRequiredCount();
+      document.getElementById('requiredCountText').innerText = req;
+      document.getElementById('selectedCountText').innerText = selectedIndices.length;
+
+      capturedFrames.forEach((frame, idx) => {
+        const selIdx = selectedIndices.indexOf(idx);
+        const isSelected = selIdx !== -1;
+        const div = document.createElement('div');
+        div.className = `relative aspect-[3/2] rounded-xl overflow-hidden cursor-pointer border-2 transition ${isSelected ? 'border-blue-500 scale-[0.98]' : 'border-zinc-700 opacity-60 hover:opacity-100'}`;
+        div.innerHTML = `
+          <img src="${frame.toDataURL('image/jpeg', 0.6)}" class="w-full h-full object-cover">
+          ${isSelected ? `<span class="absolute top-1 left-1 bg-blue-600 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-lg">${selIdx + 1}</span>` : ''}
+        `;
+        div.onclick = () => toggleSelectPhoto(idx);
+        grid.appendChild(div);
+      });
+    }
+
+    function toggleSelectPhoto(idx) {
+      const existingPos = selectedIndices.indexOf(idx);
+      const req = getRequiredCount();
+
+      if (existingPos !== -1) {
+        selectedIndices.splice(existingPos, 1);
+      } else {
+        if (selectedIndices.length < req) {
+          selectedIndices.push(idx);
+        } else {
+          // 가득 찼으면 첫 번째 것을 빼고 추가
+          selectedIndices.shift();
+          selectedIndices.push(idx);
+        }
+      }
+      renderPickGrid();
+      renderFinalCanvas();
+    }
+
+    function setLayout(layout, btn) {
+      currentLayout = layout;
+      document.querySelectorAll('.layout-btn').forEach(b => {
+        b.className = "layout-btn bg-zinc-800 text-zinc-300 py-2 rounded-xl text-xs font-bold transition";
+      });
+      btn.className = "layout-btn active bg-blue-600 text-white py-2 rounded-xl text-xs font-bold transition";
+
+      // 3x3일 경우 6장 사진 중 반복 보충
+      const req = getRequiredCount();
+      while (selectedIndices.length < req) {
+        selectedIndices.push(selectedIndices.length % capturedFrames.length);
+      }
+      if (selectedIndices.length > req) {
+        selectedIndices = selectedIndices.slice(0, req);
+      }
+
+      renderPickGrid();
+      renderFinalCanvas();
+    }
+
+    function setBgColor(hex, btn) {
+      currentBgColor = hex;
+      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('border-blue-500', 'border-2'));
+      btn.classList.add('border-blue-500', 'border-2');
+      renderFinalCanvas();
+    }
+
+    // ========================================================
+    // 4. 4×6 캔버스 합성 엔진 (1200 × 1800 px)
+    // ========================================================
+    function renderFinalCanvas() {
+      const canvas = document.getElementById('previewCanvas');
       canvas.width = 1200;
-      canvas.height = 1800; // 표준 4x6 인치 해상도
+      canvas.height = 1800; // 300DPI 4x6 표준 인쇄 해상도
       const ctx = canvas.getContext('2d');
 
-      // 배경색 (커스텀 프레임이 없을 시 모던 블랙)
-      ctx.fillStyle = "#18181b";
+      // 배경 채우기
+      ctx.fillStyle = currentBgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 쌍둥이 컷 (좌/우 동일 1x4 스트립 배치)
-      const stripWidth = 540;
-      const leftOffsets = [40, 620];
+      const isDark = (currentBgColor === '#18181b' || currentBgColor === '#0f172a' || currentBgColor === '#4c0519');
+      const textColor = isDark ? '#ffffff' : '#18181b';
+      const subTextColor = isDark ? '#a1a1aa' : '#71717a';
 
-      leftOffsets.forEach(startX => {
-        let startY = 60;
-        const photoW = 480;
-        const photoH = 320;
-        const gap = 30;
+      const topText = document.getElementById('inputTopText').value.trim();
+      const midText = document.getElementById('inputMiddleText').value.trim();
+      const btmText = document.getElementById('inputBottomText').value.trim() || 'PHOTO STUDIO';
 
-        capturedFrames.forEach(frame => {
-          ctx.drawImage(frame, startX + 30, startY, photoW, photoH);
-          startY += photoH + gap;
-        });
+      // 상단 문구
+      if (topText) {
+        ctx.fillStyle = subTextColor;
+        ctx.font = "bold 22px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(topText, canvas.width / 2, 45);
+      }
 
-        // 하단 브랜드 텍스트
-        ctx.fillStyle = "#a1a1aa";
-        ctx.font = "bold 24px sans-serif";
+      // 프레임별 렌더링
+      if (currentLayout === 'twin') {
+        renderTwinLayout(ctx, textColor, subTextColor, midText, btmText);
+      } else if (currentLayout === '2x2') {
+        render2x2Layout(ctx, textColor, subTextColor, midText, btmText);
+      } else if (currentLayout === '3x3') {
+        render3x3Layout(ctx, textColor, subTextColor, midText, btmText);
+      }
+    }
+
+    // 세로 4컷 쌍둥이 (Twin)
+    function renderTwinLayout(ctx, textColor, subTextColor, midText, btmText) {
+      const leftPositions = [40, 620];
+      const photoW = 480;
+      const photoH = 320;
+      const gap = 24;
+
+      leftPositions.forEach(startX => {
+        let y = 70;
+        for (let i = 0; i < 4; i++) {
+          const frameIdx = selectedIndices[i % selectedIndices.length] ?? 0;
+          const img = capturedFrames[frameIdx];
+          if (img) ctx.drawImage(img, startX + 30, y, photoW, photoH);
+
+          // 첫 번째 사진 바로 아래 중간 문구 삽입
+          if (i === 0 && midText) {
+            ctx.fillStyle = subTextColor;
+            ctx.font = "600 18px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(midText, startX + 270, y + photoH + 18);
+          }
+          y += photoH + gap;
+        }
+
+        // 하단 문구
+        ctx.fillStyle = textColor;
+        ctx.font = "900 24px sans-serif";
         ctx.textAlign = "center";
         const today = new Date().toLocaleDateString('ko-KR');
-        ctx.fillText(`PHOTOEAST • ${today}`, startX + (stripWidth / 2), startY + 50);
+        ctx.fillText(`${btmText} • ${today}`, startX + 270, 1740);
       });
 
-      // 가운데 절취선 (가위 점선 ✂️)
-      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      // 중앙 절취 점선 (✂️)
+      ctx.strokeStyle = "rgba(150,150,150,0.3)";
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.moveTo(600, 40);
-      ctx.lineTo(600, 1760);
+      ctx.moveTo(600, 30);
+      ctx.lineTo(600, 1770);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
 
-      // 투명 커스텀 프레임이 적용되어 있을 경우 위에 덮어쓰기
-      if (customFrameImage) {
-        ctx.drawImage(customFrameImage, 0, 0, canvas.width, canvas.height);
+    // 2×2 와이드 그리드
+    function render2x2Layout(ctx, textColor, subTextColor, midText, btmText) {
+      const pW = 520;
+      const pH = 650;
+      const coords = [
+        { x: 60, y: 120 }, { x: 620, y: 120 },
+        { x: 60, y: 880 }, { x: 620, y: 880 }
+      ];
+
+      for (let i = 0; i < 4; i++) {
+        const frameIdx = selectedIndices[i % selectedIndices.length] ?? 0;
+        const img = capturedFrames[frameIdx];
+        if (img) ctx.drawImage(img, coords[i].x, coords[i].y, pW, pH);
       }
 
-      // 화면 전환
-      document.getElementById('view-booth').classList.add('hidden');
-      document.getElementById('view-result').classList.remove('hidden');
+      if (midText) {
+        ctx.fillStyle = subTextColor;
+        ctx.font = "bold 20px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(midText, 600, 820);
+      }
 
-      // 3초 움직이는 라이브 비디오 및 QR 생성
-      generateMovingVideo();
-      generateQrCode();
-      startAutoResetTimer();
+      ctx.fillStyle = textColor;
+      ctx.font = "900 28px sans-serif";
+      ctx.textAlign = "center";
+      const today = new Date().toLocaleDateString('ko-KR');
+      ctx.fillText(`${btmText} • ${today}`, 600, 1720);
+    }
+
+    // 3×3 인스타그램 그리드
+    function render3x3Layout(ctx, textColor, subTextColor, midText, btmText) {
+      const pW = 340;
+      const pH = 440;
+      const gapX = 30;
+      const gapY = 30;
+      const startX = 60;
+      let startY = 120;
+
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          const idx = row * 3 + col;
+          const frameIdx = selectedIndices[idx % selectedIndices.length] ?? 0;
+          const img = capturedFrames[frameIdx];
+          const x = startX + col * (pW + gapX);
+          const y = startY + row * (pH + gapY);
+          if (img) ctx.drawImage(img, x, y, pW, pH);
+        }
+      }
+
+      ctx.fillStyle = textColor;
+      ctx.font = "900 28px sans-serif";
+      ctx.textAlign = "center";
+      const today = new Date().toLocaleDateString('ko-KR');
+      ctx.fillText(`${btmText} • ${today}`, 600, 1720);
     }
 
     // ========================================================
-    // 6. 3초 움직이는 라이브 네컷 비디오 엔진
+    // 5. 수령 허브 및 3종 미디어 생성기
     // ========================================================
-    function generateMovingVideo() {
+    function goToResultView() {
+      // previewCanvas를 finalCanvas에 복사
+      const finalCanvas = document.getElementById('finalCanvas');
+      finalCanvas.width = 1200;
+      finalCanvas.height = 1800;
+      const fCtx = finalCanvas.getContext('2d');
+      fCtx.drawImage(document.getElementById('previewCanvas'), 0, 0);
+
+      document.getElementById('view-custom').classList.add('hidden');
+      document.getElementById('view-result').classList.remove('hidden');
+
+      // 3초 모션 루프 비디오 생성
+      generateMotionLoopVideo();
+      // QR 코드 생성
+      generateResultQr();
+      // 60초 자동 리셋 타이머 시작
+      startAutoResetTimer();
+    }
+
+    // 3초 모션 루프 비디오 생성 엔진
+    function generateMotionLoopVideo() {
       const motionCanvas = document.getElementById('motionCanvas');
       const mCtx = motionCanvas.getContext('2d');
-      const stream = motionCanvas.captureStream(30);
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const motionStream = motionCanvas.captureStream(30);
+      const recorder = new MediaRecorder(motionStream, { mimeType: 'video/webm' });
       const chunks = [];
 
-      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'video/webm' });
-        movingVideoBlobUrl = URL.createObjectURL(blob);
+        motionBlobUrl = URL.createObjectURL(blob);
+        document.getElementById('btnMotion').classList.remove('opacity-50');
       };
 
       recorder.start();
-
-      let idx = 0;
-      const interval = setInterval(() => {
-        mCtx.drawImage(capturedFrames[idx % SHOT_COUNT], 0, 0, motionCanvas.width, motionCanvas.height);
-        idx++;
-      }, 750); // 0.75초마다 사진 교차
+      let step = 0;
+      const timer = setInterval(() => {
+        const frameIdx = selectedIndices[step % selectedIndices.length] ?? 0;
+        mCtx.drawImage(capturedFrames[frameIdx], 0, 0, motionCanvas.width, motionCanvas.height);
+        step++;
+      }, 500); // 0.5초마다 교차
 
       setTimeout(() => {
-        clearInterval(interval);
+        clearInterval(timer);
         recorder.stop();
       }, 3000); // 3초 녹화
     }
 
-    // ========================================================
-    // 7. QR 코드 및 파일 다운로드 엔진
-    // ========================================================
-    function generateQrCode() {
-      const qrBox = document.getElementById('qrcodeBox');
-      qrBox.innerHTML = '';
-      // 완성 이미지를 Base64 데이터 URI 또는 웹 배포 URL로 연결
-      const photoDataUrl = document.getElementById('outputCanvas').toDataURL('image/jpeg', 0.85);
-      new QRCode(qrBox, {
-        text: photoDataUrl.substring(0, 1800), // 가벼운 로컬 QR 링크
+    // 2배속 타임랩스 비디오 변환 엔진
+    function generate2xTimelapse(rawBlob) {
+      const video = document.getElementById('timelapseRawPlayer');
+      video.src = URL.createObjectURL(rawBlob);
+      video.playbackRate = 2.0;
+
+      video.onloadeddata = () => {
+        video.play();
+        const tCanvas = document.getElementById('timelapseCanvas');
+        const tCtx = tCanvas.getContext('2d');
+        const tStream = tCanvas.captureStream(30);
+        const recorder = new MediaRecorder(tStream, { mimeType: 'video/webm' });
+        const tChunks = [];
+
+        recorder.ondataavailable = e => { if (e.data.size > 0) tChunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(tChunks, { type: 'video/webm' });
+          timelapseBlobUrl = URL.createObjectURL(blob);
+          document.getElementById('btnTimelapse').classList.remove('opacity-50');
+        };
+
+        recorder.start();
+        const drawLoop = () => {
+          if (!video.paused && !video.ended) {
+            tCtx.drawImage(video, 0, 0, tCanvas.width, tCanvas.height);
+            requestAnimationFrame(drawLoop);
+          } else {
+            recorder.stop();
+          }
+        };
+        drawLoop();
+      };
+    }
+
+    // QR 코드 생성
+    function generateResultQr() {
+      const box = document.getElementById('resultQrCode');
+      box.innerHTML = '';
+      const photoUri = document.getElementById('finalCanvas').toDataURL('image/jpeg', 0.85);
+      new QRCode(box, {
+        text: photoUri.substring(0, 1800),
         width: 140,
         height: 140
       });
     }
 
-    function downloadPhotoDirect() {
+    function downloadImage() {
       const link = document.createElement('a');
-      link.download = `photoeast_${Date.now()}.jpg`;
-      link.href = document.getElementById('outputCanvas').toDataURL('image/jpeg', 0.95);
+      link.download = `PHOTOEAST_${Date.now()}.jpg`;
+      link.href = document.getElementById('finalCanvas').toDataURL('image/jpeg', 0.95);
       link.click();
     }
 
-    function downloadMovingVideo() {
-      if (!movingVideoBlobUrl) return alert("비디오 생성 중입니다. 잠시 후 눌러주세요.");
+    function downloadMotionVideo() {
+      if (!motionBlobUrl) return alert("3초 모션 비디오 인코딩 중입니다. 잠시 후 눌러주세요.");
       const link = document.createElement('a');
-      link.download = `photoeast_motion_${Date.now()}.webm`;
-      link.href = movingVideoBlobUrl;
+      link.download = `PHOTOEAST_MOTION_${Date.now()}.webm`;
+      link.href = motionBlobUrl;
       link.click();
     }
 
-    // ========================================================
-    // 8. 40초 무인 자동 리셋 타이머
-    // ========================================================
+    function downloadTimelapseVideo() {
+      if (!timelapseBlobUrl) return alert("2배속 타임랩스 비디오 처리 중입니다. 잠시 후 눌러주세요.");
+      const link = document.createElement('a');
+      link.download = `PHOTOEAST_TIMELAPSE_${Date.now()}.webm`;
+      link.href = timelapseBlobUrl;
+      link.click();
+    }
+
+    // 60초 자동 복귀 타이머
     function startAutoResetTimer() {
-      let remain = 40;
-      const badge = document.getElementById('resetTimerBadge');
+      let remain = 60;
+      const badge = document.getElementById('autoResetTimer');
       badge.innerText = `${remain}초`;
 
-      if (resetTimerInterval) clearInterval(resetTimerInterval);
-      resetTimerInterval = setInterval(() => {
+      if (resetCountdownInterval) clearInterval(resetCountdownInterval);
+      resetCountdownInterval = setInterval(() => {
         remain--;
         badge.innerText = `${remain}초`;
         if (remain <= 0) {
-          clearInterval(resetTimerInterval);
-          resetToHome();
+          clearInterval(resetCountdownInterval);
+          resetBooth();
         }
       }, 1000);
     }
 
-    function resetToHome() {
-      if (resetTimerInterval) clearInterval(resetTimerInterval);
+    function resetBooth() {
+      if (resetCountdownInterval) clearInterval(resetCountdownInterval);
       document.getElementById('view-result').classList.add('hidden');
-      document.getElementById('view-booth').classList.remove('hidden');
-      document.getElementById('startTouchZone').classList.remove('hidden');
+      document.getElementById('view-custom').classList.add('hidden');
+      document.getElementById('view-camera').classList.remove('hidden');
+      document.getElementById('standbyDock').classList.remove('hidden');
     }
-
-    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
   </script>
 </body>
 </html>
